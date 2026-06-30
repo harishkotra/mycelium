@@ -1,0 +1,12 @@
+{
+  "name": "@mycelium/core",
+  "version": "0.0.1",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "@cognee/cognee-ts": "^0.1.2"
+  },
+  "devDependencies": {
+    "dotenv": "^17.4.2"
+  }
+}

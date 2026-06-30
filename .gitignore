@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.env
+*.env
+
+# Cognee runtime data
+.cognee_system/
+.data_storage/
+.anon_id
+cognee.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
