@@ -12,6 +12,9 @@ cognee.db
 # Mycelium runtime data
 .mycelium/
 
+# Next.js build cache
+.next/
+
 # OS
 .DS_Store
 Thumbs.db

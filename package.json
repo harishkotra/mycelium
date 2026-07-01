@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dashboard": "pnpm --filter @mycelium/dashboard dev",
+    "dashboard:build": "pnpm --filter @mycelium/dashboard build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
