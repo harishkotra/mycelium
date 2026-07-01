@@ -1,5 +1,5 @@
 import { CogneeClient } from "./cogneeClient";
-import type { AgentId, AgentRef, AgentStatus } from "./types";
+import type { AgentId, AgentRef, AgentStatus, Provenance } from "./types";
 import type {
   CogneeDataInput,
   CogneeSearchOptions,
@@ -14,6 +14,7 @@ import type {
   CogneeForgetResult,
   CogneeDataset,
 } from "@cognee/cognee-ts";
+import { tagWithProvenance } from "./sync-protocol/provenance";
 
 export class Agent {
   readonly agentId: AgentId;
@@ -32,9 +33,22 @@ export class Agent {
 
   async remember(
     data: CogneeDataInput | CogneeDataInput[],
-    opts?: CogneeRememberOptions,
+    opts?: CogneeRememberOptions & { provenance?: Provenance },
   ): Promise<CogneeRememberResult> {
-    return this.client.remember(data, this.datasetName, opts);
+    const prov = opts?.provenance;
+    if (prov && data && !Array.isArray(data) && data.type === "text") {
+      data = { type: "text", text: tagWithProvenance(data.text, prov) };
+    }
+    if (prov && data && Array.isArray(data)) {
+      data = data.map((d) =>
+        d.type === "text"
+          ? { type: "text" as const, text: tagWithProvenance(d.text, prov) }
+          : d,
+      );
+    }
+    const { provenance: _p, ...restOpts } = (opts ??
+      {}) as CogneeRememberOptions & { provenance?: Provenance };
+    return this.client.remember(data, this.datasetName, restOpts);
   }
 
   async recall(

@@ -9,6 +9,9 @@ dist/
 .anon_id
 cognee.db
 
+# Mycelium runtime data
+.mycelium/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -19,3 +22,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Local overrides
+*.local

@@ -2,5 +2,11 @@
   "name": "@mycelium/cli",
   "version": "0.0.1",
   "private": true,
-  "main": "src/index.ts"
+  "main": "src/index.ts",
+  "dependencies": {
+    "@mycelium/core": "workspace:*"
+  },
+  "devDependencies": {
+    "dotenv": "^17.4.2"
+  }
 }

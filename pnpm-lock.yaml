@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@types/node':
+        specifier: ^26.0.1
+        version: 26.0.1
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
@@ -17,7 +20,15 @@ importers:
 
   examples/travel-assistant-demo: {}
 
-  packages/cli: {}
+  packages/cli:
+    dependencies:
+      '@mycelium/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
 
   packages/core:
     dependencies:
@@ -217,6 +228,9 @@ packages:
   '@neon-rs/load@0.2.6':
     resolution: {integrity: sha512-7p8j+guEhGTJNJISgmHO0homqGYAc0SDfmgGZfluMcQnimcceMY87b4hdqufp+7YmsOVC4W/JvT3/Tpi3/gy+Q==}
 
+  '@types/node@26.0.1':
+    resolution: {integrity: sha512-fc3KiUoBt6kie0N9bIW3E47vZsuaMf0PM2AaUpLCLT0s/LvX1nxAim6Fc049cNxODPpGm6qRAuUOB86SkRuPQw==}
+
   dotenv@16.6.1:
     resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
     engines: {node: '>=12'}
@@ -244,6 +258,9 @@ packages:
     resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
     hasBin: true
+
+  undici-types@8.3.0:
+    resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
 snapshots:
 
@@ -345,6 +362,10 @@ snapshots:
 
   '@neon-rs/load@0.2.6': {}
 
+  '@types/node@26.0.1':
+    dependencies:
+      undici-types: 8.3.0
+
   dotenv@16.6.1: {}
 
   dotenv@17.4.2: {}
@@ -388,3 +409,5 @@ snapshots:
       fsevents: 2.3.3
 
   typescript@6.0.3: {}
+
+  undici-types@8.3.0: {}
