@@ -66,12 +66,16 @@ export class CogneeClient {
     const cogneeKey =
       config?.llmApiKey ?? config?.llmConfig?.apiKey ?? this.llmConfig.apiKey;
 
-    // Cognee's Rust SDK reads LLM_PROVIDER and LLM_API_KEY from env
-    // and only supports "openai" / "mock" provider names.  We use our
-    // own config resolution but must set the env var so Cognee's warm()
-    // doesn't fail with "llm_api_key must be configured".
+    // Cognee's Rust SDK reads env vars directly — it must see an "openai"
+    // provider with a valid api-key or warm() throws.  We delete the user's
+    // LLM_PROVIDER (which may be "groq" / "lm-studio" etc) and replace it
+    // with "openai" plus the resolved credentials.
     delete process.env.LLM_PROVIDER;
-    if (cogneeKey) process.env.LLM_API_KEY = cogneeKey;
+    process.env.LLM_PROVIDER = "openai";
+    if (cogneeKey) {
+      process.env.LLM_API_KEY = cogneeKey;
+      process.env.OPENAI_API_KEY = cogneeKey;
+    }
 
     this.cog = new Cognee({
       llmModel: this.llmConfig.model,

@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import dotenv from "dotenv";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const coreEnv = resolve(__dirname, "../../packages/core/.env");
+const coreEnv = resolve(__dirname, "../../../packages/core/.env");
 if (existsSync(coreEnv)) dotenv.config({ path: coreEnv });
 
 import {
