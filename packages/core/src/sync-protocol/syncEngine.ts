@@ -62,10 +62,8 @@ export class SyncEngine {
 
     for (const text of sourceFacts) {
       const tagged = tagWithProvenance(text, provenance);
-      await client.remember({ type: "text", text: tagged }, subscriberDataset);
+      await client.add({ type: "text", text: tagged }, subscriberDataset);
     }
-
-    await client.waitForIndexingComplete(subscriberDataset);
 
     const after = snapshotFromTexts(sourceFacts);
     const before = beforeSnapshot.nodes.length

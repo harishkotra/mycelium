@@ -4,24 +4,40 @@ import type {
   ContradictionResult,
 } from "./types";
 import type { CogneeClient } from "./cogneeClient";
+import { type LlmConfigInput, resolveLlmConfig } from "./llm";
 
 export interface ContradictionDetectorOptions {
+  /** Pass LLM config inline (endpoint, apiKey, model). */
   llmEndpoint?: string;
   llmApiKey?: string;
   llmModel?: string;
+  /** Or pass a full LlmConfigInput object (takes precedence over individual fields). */
+  llmConfig?: LlmConfigInput;
   confidenceThreshold?: number;
+}
+
+function resolveDetectorOpts(opts: ContradictionDetectorOptions): {
+  endpoint: string;
+  apiKey: string;
+  model: string;
+} {
+  if (opts.llmConfig) {
+    const c = resolveLlmConfig(opts.llmConfig);
+    return { endpoint: c.endpoint, apiKey: c.apiKey, model: c.model };
+  }
+  const c = resolveLlmConfig({
+    endpoint: opts.llmEndpoint,
+    apiKey: opts.llmApiKey,
+    model: opts.llmModel,
+  });
+  return { endpoint: c.endpoint, apiKey: c.apiKey, model: c.model };
 }
 
 async function callLlm(
   prompt: string,
   opts: ContradictionDetectorOptions,
 ): Promise<{ isContradiction: boolean; relation: string; confidence: number }> {
-  const endpoint =
-    opts.llmEndpoint ??
-    process.env["OPENAI_URL"] ??
-    "https://api.openai.com/v1";
-  const apiKey = opts.llmApiKey ?? process.env["OPENAI_TOKEN"] ?? "";
-  const model = opts.llmModel ?? process.env["LLM_MODEL"] ?? "gpt-4o-mini";
+  const { endpoint, apiKey, model } = resolveDetectorOpts(opts);
 
   const body = {
     model,

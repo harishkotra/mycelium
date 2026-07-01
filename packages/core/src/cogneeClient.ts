@@ -7,6 +7,10 @@ import {
   type CogneeSearchResponse,
   type CogneeRecallOptions,
   type CogneeRecallResult,
+  type CogneeAddOptions,
+  type CogneeAddResult,
+  type CogneeCognifyOptions,
+  type CogneeCognifyResult,
   type CogneeRememberOptions,
   type CogneeRememberResult,
   type CogneeImproveOptions,
@@ -14,26 +18,63 @@ import {
   type CogneeForgetTarget,
   type CogneeForgetResult,
   type CogneeDataset,
-  type CogneeCognifyOptions,
 } from "@cognee/cognee-ts";
+import {
+  type LlmProvider,
+  type LlmConfigInput,
+  resolveLlmConfig,
+  isLocalProvider,
+} from "./llm";
 
 export interface CogneeClientConfig {
+  /** Shorthand — picks a built-in preset. Overrides endpoint / model defaults. */
+  llmProvider?: LlmProvider;
+  /** Override model name. */
   llmModel?: string;
+  /** Override API key. */
   llmApiKey?: string;
+  /** Override endpoint URL. */
   llmEndpoint?: string;
+  /** Pass the full LLM config object directly (overrides individual fields). */
+  llmConfig?: LlmConfigInput;
   embeddingProvider?: string;
   vectorDbProvider?: string;
   graphDbProvider?: string;
+  /** Cognee Cloud API key (sets COGNEE_API_KEY). */
+  cogneeApiKey?: string;
+  /** Cognee Cloud API URL (sets COGNEE_API_URL). */
+  cogneeApiUrl?: string;
 }
 
 export class CogneeClient {
+  readonly llmConfig: ReturnType<typeof resolveLlmConfig>;
   private cog: Cognee;
 
   constructor(config?: CogneeClientConfig) {
+    if (config?.cogneeApiKey) process.env.COGNEE_API_KEY = config.cogneeApiKey;
+    if (config?.cogneeApiUrl) process.env.COGNEE_API_URL = config.cogneeApiUrl;
+
+    this.llmConfig = resolveLlmConfig(
+      config?.llmConfig ?? {
+        provider: config?.llmProvider,
+        model: config?.llmModel,
+        apiKey: config?.llmApiKey,
+        endpoint: config?.llmEndpoint,
+      },
+    );
+
+    const cogneeKey =
+      config?.llmApiKey ?? config?.llmConfig?.apiKey ?? this.llmConfig.apiKey;
+
+    // Cognee's Rust SDK reads LLM_PROVIDER from env and only supports
+    // "openai" / "mock".  We use it for our own config resolution, but
+    // must clear it so Cognee doesn't choke on "groq" / "lm-studio" etc.
+    delete process.env.LLM_PROVIDER;
+
     this.cog = new Cognee({
-      llmModel: config?.llmModel,
-      llmApiKey: config?.llmApiKey,
-      llmEndpoint: config?.llmEndpoint,
+      llmModel: this.llmConfig.model,
+      llmApiKey: cogneeKey || undefined,
+      llmEndpoint: this.llmConfig.endpoint,
       embeddingProvider: config?.embeddingProvider ?? "mock",
       vectorDbProvider: config?.vectorDbProvider ?? "brute-force",
       graphDbProvider: config?.graphDbProvider ?? "kuzu",
@@ -52,6 +93,21 @@ export class CogneeClient {
     opts?: CogneeRememberOptions,
   ): Promise<CogneeRememberResult> {
     return this.cog.remember(data, datasetName, opts);
+  }
+
+  async add(
+    data: CogneeDataInput | CogneeDataInput[],
+    datasetName: string,
+    opts?: CogneeAddOptions,
+  ): Promise<CogneeAddResult> {
+    return this.cog.add(data, datasetName, opts);
+  }
+
+  async cognify(
+    datasetName: string,
+    opts?: CogneeCognifyOptions,
+  ): Promise<CogneeCognifyResult> {
+    return this.cog.cognify(datasetName, opts);
   }
 
   async recall(

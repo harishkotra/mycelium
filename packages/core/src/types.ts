@@ -1,3 +1,5 @@
+import type { CogneeImproveResult } from "@cognee/cognee-ts";
+
 export type AgentId = string;
 
 export interface AgentRef {
@@ -142,4 +144,21 @@ export interface Subscription {
   sourceAgentId: AgentId;
   sourceDataset: string;
   active: boolean;
+}
+
+export type ResolutionStrategy =
+  "keep_newer" | "keep_higher_trust" | "flag_all";
+
+export interface ResolvedContradiction {
+  nodeLabel: string;
+  existingStatement: string;
+  incomingStatement: string;
+  resolution: "kept_existing" | "kept_incoming" | "kept_both_flagged";
+  confidence: number;
+}
+
+export interface ImprovedMemoryResult {
+  improveResult: CogneeImproveResult;
+  diff: MemoryDiffResult;
+  resolvedContradictions: ResolvedContradiction[];
 }

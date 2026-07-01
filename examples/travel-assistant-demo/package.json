@@ -1,5 +1,16 @@
 {
   "name": "travel-assistant-demo",
   "version": "0.0.1",
-  "private": true
+  "private": true,
+  "scripts": {
+    "demo": "tsx src/demo.ts",
+    "demo:cloud": "COGNEE_CLOUD_AUTH=1 tsx src/demo.ts"
+  },
+  "dependencies": {
+    "@mycelium/core": "workspace:*",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0"
+  }
 }

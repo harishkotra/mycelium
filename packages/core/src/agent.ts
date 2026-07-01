@@ -1,5 +1,12 @@
 import { CogneeClient } from "./cogneeClient";
-import type { AgentId, AgentRef, AgentStatus, Provenance } from "./types";
+import type {
+  AgentId,
+  AgentRef,
+  AgentStatus,
+  Provenance,
+  ImprovedMemoryResult,
+  ResolutionStrategy,
+} from "./types";
 import type {
   CogneeDataInput,
   CogneeSearchOptions,
@@ -15,6 +22,9 @@ import type {
   CogneeDataset,
 } from "@cognee/cognee-ts";
 import { tagWithProvenance } from "./sync-protocol/provenance";
+import { takeSnapshot } from "./snapshot";
+import { runDiff, type RunDiffOptions } from "./diff";
+import { resolveContradictions } from "./contradictionResolver";
 
 export class Agent {
   readonly agentId: AgentId;
@@ -66,9 +76,49 @@ export class Agent {
   }
 
   async improve(
-    opts?: Omit<CogneeImproveOptions, "datasetName">,
-  ): Promise<CogneeImproveResult> {
-    return this.client.improve({ ...opts, datasetName: this.datasetName });
+    opts?: Omit<CogneeImproveOptions, "datasetName"> & {
+      diffOptions?: RunDiffOptions;
+      autoResolve?: boolean;
+      resolutionStrategy?: ResolutionStrategy;
+      resolutionConfidenceThreshold?: number;
+    },
+  ): Promise<ImprovedMemoryResult> {
+    const {
+      diffOptions,
+      autoResolve,
+      resolutionStrategy,
+      resolutionConfidenceThreshold,
+      ...improveOpts
+    } = opts ?? {};
+
+    const before = await takeSnapshot(this.client, this.datasetName);
+    const improveResult = await this.client.improve({
+      ...improveOpts,
+      datasetName: this.datasetName,
+    });
+    const after = await takeSnapshot(this.client, this.datasetName);
+
+    const diff = await runDiff(
+      before,
+      after,
+      this.client,
+      this.datasetName,
+      diffOptions,
+    );
+
+    const resolved =
+      autoResolve && diff.contradictions.length > 0
+        ? resolveContradictions(diff.contradictions, {
+            strategy: resolutionStrategy,
+            confidenceThreshold: resolutionConfidenceThreshold,
+          })
+        : [];
+
+    return {
+      improveResult,
+      diff,
+      resolvedContradictions: resolved,
+    };
   }
 
   async forget(
