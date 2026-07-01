@@ -151,9 +151,3 @@ Opens `http://localhost:3000` with three screens:
 
 Currently uses mock data (`packages/dashboard/src/mock/`). Swap individual screens to real
 `CogneeClient` calls as the backend is wired up.
-
-## AI Assistance Disclosure
-
-Portions of this codebase were developed with assistance from AI (Claude Code).
-The architecture, module structure, and key design decisions were human-directed;
-implementation details, test scaffolding, and documentation were co-created with AI.
