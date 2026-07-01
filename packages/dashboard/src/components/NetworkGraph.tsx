@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   forceSimulation,
   forceLink,
@@ -10,7 +10,7 @@ import {
   type SimulationNodeDatum,
   type SimulationLinkDatum,
 } from "d3-force";
-import type { AgentRecord, Subscription, TrustRecord } from "@/lib/types";
+import type { AgentRecord, Subscription } from "@/lib/types";
 import { getTrustForPair } from "@/mock/mockAgents";
 
 interface GraphNode extends SimulationNodeDatum {
@@ -28,27 +28,16 @@ interface Props {
   subscriptions: Subscription[];
 }
 
+const W = 960;
+const H = 600;
+
 export default function NetworkGraph({ agents, subscriptions }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dim, setDim] = useState({ w: 800, h: 500 });
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
   useEffect(() => {
-    const ro = new ResizeObserver((entries) => {
-      for (const e of entries) {
-        setDim({ w: e.contentRect.width, h: e.contentRect.height });
-      }
-    });
-    if (containerRef.current) ro.observe(containerRef.current);
-    return () => ro.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!svgRef.current) return;
     const svg = svgRef.current;
-    const w = dim.w;
-    const h = dim.h;
+    if (!svg) return;
 
     const nodes: GraphNode[] = agents.map((a) => ({
       id: a.agentId,
@@ -70,17 +59,19 @@ export default function NetworkGraph({ agents, subscriptions }: Props) {
         trustScore: getTrustForPair(s.subscriberId, s.sourceAgentId),
       }));
 
-    const simulation = forceSimulation<GraphNode>(nodes)
+    // Stable coordinate system — W × H viewBox, scale with CSS
+    const sim = forceSimulation<GraphNode>(nodes)
       .force(
         "link",
         forceLink<GraphNode, GraphEdge>(edges)
           .id((d) => d.id)
-          .distance(120),
+          .distance(140),
       )
-      .force("charge", forceManyBody().strength(-300))
-      .force("center", forceCenter(w / 2, h / 2))
-      .force("collide", forceCollide(30));
+      .force("charge", forceManyBody().strength(-400))
+      .force("center", forceCenter(W / 2, H / 2))
+      .force("collide", forceCollide(40));
 
+    // Build SVG once
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     svg.innerHTML = "";
     svg.appendChild(g);
@@ -96,7 +87,7 @@ export default function NetworkGraph({ agents, subscriptions }: Props) {
     g.appendChild(linkGroup);
     g.appendChild(nodeGroup);
 
-    const linkElements: SVGLineElement[] = edges.map((edge) => {
+    const linkEls: SVGLineElement[] = edges.map((edge) => {
       const line = document.createElementNS(
         "http://www.w3.org/2000/svg",
         "line",
@@ -112,17 +103,7 @@ export default function NetworkGraph({ agents, subscriptions }: Props) {
       return line;
     });
 
-    const tooltip = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "text",
-    );
-    tooltip.setAttribute("fill", "#333");
-    tooltip.setAttribute("font-size", "12");
-    tooltip.setAttribute("text-anchor", "middle");
-    tooltip.setAttribute("pointer-events", "none");
-    g.appendChild(tooltip);
-
-    const nodeElements: SVGGElement[] = nodes.map((node) => {
+    const nodeEls: SVGGElement[] = nodes.map((node) => {
       const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
       group.setAttribute("cursor", "pointer");
 
@@ -143,7 +124,7 @@ export default function NetworkGraph({ agents, subscriptions }: Props) {
       text.setAttribute("dy", String(r + 14));
       text.setAttribute("text-anchor", "middle");
       text.setAttribute("fill", "#333");
-      text.setAttribute("font-size", "11");
+      text.setAttribute("font-size", "12");
       text.setAttribute("font-weight", "600");
       text.textContent = node.label;
 
@@ -151,31 +132,24 @@ export default function NetworkGraph({ agents, subscriptions }: Props) {
       group.appendChild(text);
 
       group.addEventListener("mouseenter", () => {
-        setHoveredNode(node.id);
         circle.setAttribute("fill", "#f59e0b");
-        tooltip.textContent = `${node.label} (${node.factCount} facts, ${edges.filter((e) => (typeof e.source === "object" ? (e.source as GraphNode).id : e.source) === node.id || (typeof e.target === "object" ? (e.target as GraphNode).id : e.target) === node.id).length} connections)`;
-        tooltip.setAttribute("opacity", "1");
       });
       group.addEventListener("mouseleave", () => {
-        setHoveredNode(null);
         circle.setAttribute("fill", "#6366f1");
-        tooltip.setAttribute("opacity", "0");
       });
-
       group.addEventListener("click", () => {
         window.location.href = `/agent/${node.id}`;
       });
 
       nodeGroup.appendChild(group);
-      const childNodes = group.children;
       return group as unknown as SVGGElement;
     });
 
-    simulation.on("tick", () => {
-      linkElements.forEach((line, i) => {
-        const edge = edges[i];
-        const src = edge.source as GraphNode;
-        const tgt = edge.target as GraphNode;
+    sim.on("tick", () => {
+      linkEls.forEach((line, i) => {
+        const e = edges[i];
+        const src = e.source as GraphNode;
+        const tgt = e.target as GraphNode;
         if (src && tgt) {
           line.setAttribute("x1", String(src.x ?? 0));
           line.setAttribute("y1", String(src.y ?? 0));
@@ -183,28 +157,29 @@ export default function NetworkGraph({ agents, subscriptions }: Props) {
           line.setAttribute("y2", String(tgt.y ?? 0));
         }
       });
-
-      nodeElements.forEach((group, i) => {
-        const node = nodes[i];
-        group.setAttribute(
-          "transform",
-          `translate(${node.x ?? 0},${node.y ?? 0})`,
-        );
+      nodeEls.forEach((group, i) => {
+        const n = nodes[i];
+        group.setAttribute("transform", `translate(${n.x ?? 0},${n.y ?? 0})`);
       });
     });
 
     return () => {
-      simulation.stop();
+      sim.stop();
     };
-  }, [dim, agents, subscriptions]);
+  }, [agents, subscriptions]);
 
   return (
     <div
       ref={containerRef}
       className="w-full border border-border rounded-lg overflow-hidden"
-      style={{ height: dim.h }}
+      style={{ minHeight: 400 }}
     >
-      <svg ref={svgRef} width={dim.w} height={dim.h} />
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full h-full"
+        preserveAspectRatio="xMidYMid meet"
+      />
     </div>
   );
 }
