@@ -15,6 +15,14 @@ cognee.db
 # Next.js build cache
 .next/
 
+# TypeScript build info
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
 # OS
 .DS_Store
 Thumbs.db
@@ -28,3 +36,8 @@ Thumbs.db
 
 # Local overrides
 *.local
+
+# Blog and social media assets (local-only, not pushed to GitHub)
+BLOG_POST.md
+X_THREAD.md
+LINKEDIN_POST.md

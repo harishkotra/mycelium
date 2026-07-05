@@ -145,6 +145,14 @@ export class CogneeClient {
     return this.cog.datasets.list();
   }
 
+  async resetDatasetPipeline(datasetName: string): Promise<void> {
+    const datasets = await this.datasets();
+    const ds = datasets.find((d) => d.name === datasetName);
+    if (ds) {
+      await this.cog.users.resetDatasetPipelineRunStatus(ds.id);
+    }
+  }
+
   async waitForIndexingComplete(
     datasetName: string,
     options?: {

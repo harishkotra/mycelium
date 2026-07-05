@@ -128,6 +128,7 @@ export interface SyncRun {
   id: string;
   subscriberDataset: string;
   sourceDataset: string;
+  sourceAgentId: AgentId;
   beforeSnapshot: GraphSnapshot;
   afterSnapshot: GraphSnapshot;
   diff: MemoryDiffResult;

@@ -1,0 +1,15 @@
+{
+  "name": "supply-chain-demo",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "demo": "tsx src/demo.ts"
+  },
+  "dependencies": {
+    "@mycelium/core": "workspace:*",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0"
+  }
+}

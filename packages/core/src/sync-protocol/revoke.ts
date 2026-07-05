@@ -35,13 +35,10 @@ export async function revokeSource(
           topK: 5,
         });
         if (findResult.result?.kind === "Text") {
-          const graphEntries = findResult.graphs
-            ? Object.values(findResult.graphs)
-            : [];
-          const nodeIds = new Set<string>();
-          for (const g of graphEntries) {
-            for (const n of g.nodes) nodeIds.add(n.id);
-          }
+          // Note: Cognee's search API returns graph context (nodes/edges), not
+          // original itemIds, so individual fact deletion is not implemented yet.
+          // The registry is cleaned up below and trust is adjusted, but the
+          // actual graph nodes remain in the dataset.
         }
       }
     }

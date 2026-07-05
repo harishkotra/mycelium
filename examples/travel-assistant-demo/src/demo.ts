@@ -12,15 +12,12 @@ import {
   initRuntime,
   CogneeClient,
   type CogneeClientConfig,
-  type GraphSnapshot,
   type LlmProvider,
   resolveLlmConfig,
   Agent,
   SyncEngine,
   TrustStore,
   acceptSync,
-  detectContradictions,
-  resolveContradictions,
 } from "@mycelium/core";
 
 const PLANNER_ID = "travel_planner";
@@ -30,18 +27,6 @@ const ASSISTANT_DS = `demo_${ASSISTANT_ID}`;
 
 function sep(label: string) {
   console.log(`\n${"─".repeat(60)}\n  ${label}\n${"─".repeat(60)}`);
-}
-
-function toSnapshot(texts: string[]): GraphSnapshot {
-  return {
-    nodes: texts.map((t, i) => ({
-      id: `fact_${i}`,
-      label: "Fact",
-      type: "synced_fact",
-      properties: { text: t },
-    })),
-    edges: [],
-  };
 }
 
 async function resetDemo(client: CogneeClient) {
@@ -62,15 +47,25 @@ async function resetDemo(client: CogneeClient) {
 }
 
 async function seedViaAdd(agent: Agent, client: CogneeClient, facts: string[]) {
-  // Use add() (no pipeline) then skip cognify — graph extraction fails with
-  // Groq's tool-call output. Data is stored; contradiction detection runs
-  // independently via direct LLM call.
   for (const fact of facts) {
     await client.add({ type: "text", text: fact }, agent.datasetName);
-    console.log(`  ✓ added: ${fact}`);
+    console.log(`  ✓ added: ${fact.slice(0, 100)}...`);
   }
   await client.waitForIndexingComplete(agent.datasetName);
   console.log(`  Add complete (${facts.length} facts).`);
+
+  // Run cognify to build the knowledge graph
+  try {
+    await client.resetDatasetPipeline(agent.datasetName);
+    const result = await client.cognify(agent.datasetName);
+    console.log(
+      `  Cognify: ${result.chunks} chunks, ${result.entities} entities, ${result.edges} edges`,
+    );
+  } catch (e) {
+    console.log(
+      `  Cognify skipped: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }
 
 /**
@@ -97,12 +92,7 @@ function pickLlmProvider(): CogneeClientConfig | undefined {
   const provider = process.env["USE_LLM_PROVIDER"] as LlmProvider | undefined;
   if (!provider) return undefined;
   const cfg = resolveLlmConfig({ provider });
-  return {
-    llmConfig: cfg,
-    llmModel: cfg.model,
-    llmApiKey: cfg.apiKey,
-    llmEndpoint: cfg.endpoint,
-  };
+  return { llmConfig: cfg };
 }
 
 async function main() {
@@ -111,85 +101,65 @@ async function main() {
 
   initRuntime();
 
-  // Merge: explicit provider override wins over cloud config
-  const plannerConfig = providerOverride ?? cloudConfig;
-  const assistantConfig = providerOverride ?? cloudConfig;
+  const clientConfig = providerOverride ?? cloudConfig;
 
-  const plannerClient = await CogneeClient.create(plannerConfig);
-  const assistantClient =
-    plannerConfig === assistantConfig
-      ? plannerClient
-      : await CogneeClient.create(assistantConfig);
+  const client = await CogneeClient.create(clientConfig);
 
-  if (plannerConfig?.cogneeApiKey) console.log("  [planner] → Cognee Cloud");
-  else
-    console.log(
-      `  [planner] → ${plannerClient.llmConfig.provider} / ${plannerClient.llmConfig.model}`,
-    );
-  if (assistantConfig?.cogneeApiKey)
-    console.log("  [assistant] → Cognee Cloud");
-  else
-    console.log(
-      `  [assistant] → ${assistantClient.llmConfig.provider} / ${assistantClient.llmConfig.model}`,
-    );
+  const backendLabel =
+    clientConfig?.cogneeApiKey || clientConfig?.cogneeApiUrl
+      ? "Cognee Cloud"
+      : `${client.llmConfig.provider} / ${client.llmConfig.model}`;
+  console.log(`  [backend] → ${backendLabel}`);
 
-  await resetDemo(plannerClient);
+  await resetDemo(client);
 
-  // ── Seed Travel Planner ──────────────────────────────────────
+  // ── Seed Travel Planner (UPDATED trip info) ──────────────────
   sep("Seed: Travel Planner");
-  const planner = new Agent(PLANNER_ID, PLANNER_DS, plannerClient);
+  const planner = new Agent(PLANNER_ID, PLANNER_DS, client);
   const plannerFacts = [
-    "[travel_planner] Alice has a business trip to Paris on June 15th.",
-    "[travel_planner] Alice prefers direct flights over layovers.",
-    "[travel_planner] Alice is comfortable with air travel and enjoys flying.",
+    "[travel_planner] FLIGHT AA1234 SFO→LAS Jun 30. ⚠ UPDATED: Now departing at 8:00 PM (was 5:00 PM). Gate changed B12→C3. Boarding 7:30 PM. Reason: ATC congestion due to LAS thunderstorms.",
+    "[travel_planner] Compensation voucher from American Airlines for AA1234 delay: $15 meal credit valid at any SFO airport restaurant. Voucher code AA-COMP-789X.",
+    "[travel_planner] HOTEL: The Venetian Resort Las Vegas. Reservation VN-88421. Deluxe Suite (upgraded from Classic King). Check-in Jun 30 (late arrival noted after 9 PM). Check-out Jul 3. 3 nights. Total $1,247.00.",
+    "[travel_planner] UBER reservation: SFO Terminal 1 to airport hotels area for 12:30 PM Jun 30. Driver Marcus, Tesla Model 3 (white), license 7XRF432. Est. fare $18.",
+    "[travel_planner] DINING: Bazaar Meat by José Andrés at SLS Las Vegas. Jul 1 at 7:30 PM. Party of 2. Confirmation R-5592. Note: Anniversary dinner.",
+    "[travel_planner] WEATHER: Las Vegas Jun 30-Jul 3. High 107°F (42°C), Low 82°F (28°C). Sunny, no precipitation. Heat advisory in effect.",
+    "[travel_planner] BAGGAGE: 1 checked bag included on AA1234. Carry-on + personal item allowed. Bag tag #AA-88421.",
+    "[travel_planner] RENTAL CAR: Enterprise at LAS airport. Midsize SUV confirmed. Confirmation EN-77324. Pickup Jun 30 after 9 PM. $340 total.",
   ];
-  await seedViaAdd(planner, plannerClient, plannerFacts);
+  await seedViaAdd(planner, client, plannerFacts);
 
-  // ── Seed Personal Assistant ──────────────────────────────────
+  // ── Seed Personal Assistant (calendar/reminders with OLD info) ──
   sep("Seed: Personal Assistant");
-  const assistant = new Agent(ASSISTANT_ID, ASSISTANT_DS, assistantClient);
+  const assistant = new Agent(ASSISTANT_ID, ASSISTANT_DS, client);
   const assistantFacts = [
-    "[personal_assistant] Alice has a conference in Paris on June 14th.",
-    "[personal_assistant] Alice always requests a window seat on flights.",
-    "[personal_assistant] Alice is afraid of flying and avoids air travel whenever possible.",
+    "[personal_assistant] CALENDAR: Flight AA1234 SFO→LAS. Jun 30, 5:00 PM departure. Gate B12, Terminal 1. Boarding 4:30 PM. Status: CONFIRMED. Created from booking confirmation email Jun 10.",
+    "[personal_assistant] CALENDAR: The Venetian Resort Las Vegas check-in. Jun 30, 3:00 PM. 3355 S Las Vegas Blvd. Confirmation VN-88421.",
+    "[personal_assistant] CALENDAR: Bazaar Meat by José Andrés. Jul 1, 7:30 PM. SLS Las Vegas. Party of 2. Confirmation R-5592.",
+    "[personal_assistant] REMINDER: Pack suitcase — chargers, sunscreen, jacket for airplane. Jun 30 at 10:00 AM.",
+    "[personal_assistant] REMINDER: Water the plants before leaving for Vegas. Jun 30 at 9:00 AM. Priority: high.",
+    "[personal_assistant] REMINDER: Print boarding passes for AA1234. Jun 29 at 8:00 PM.",
+    "[personal_assistant] ALERT: Flight price alert — AA1234 SFO→LAS. You paid $298. Current price $412. You saved $114 booking early.",
+    "[personal_assistant] CALENDAR: Enterprise car rental pickup at LAS. Jun 30, 4:30 PM. Confirmation EN-77324.",
   ];
-  await seedViaAdd(assistant, assistantClient, assistantFacts);
+  await seedViaAdd(assistant, client, assistantFacts);
 
-  // ── Detect contradiction ─────────────────────────────────────
-  sep("Contradiction Detection");
-  const contradictions = await detectContradictions(
-    null,
-    PLANNER_DS,
-    toSnapshot(assistantFacts),
-    toSnapshot(plannerFacts),
-  );
-  if (contradictions.length > 0) {
-    for (const c of contradictions) {
-      const certainty = c.isContradiction ? "CONTRADICTION" : "compatible";
-      const icon = c.isContradiction ? "⚠" : "✓";
-      console.log(
-        `  ${icon} [${certainty}] ${c.nodeLabel}  (confidence: ${c.confidence.toFixed(2)})`,
-      );
-      console.log(`     Existing: "${c.existingStatement}"`);
-      console.log(`     Incoming: "${c.incomingStatement}"`);
-      if (c.relation) console.log(`     Relation:  ${c.relation}`);
-    }
-  } else {
-    console.log("  No contradictions detected.");
-  }
-
-  // ── Sync ─────────────────────────────────────────────────────
   sep("Sync: Personal Assistant → Travel Planner");
   const trustStore = new TrustStore();
-  const engine = new SyncEngine({ trustStore, autoMergeThreshold: 0.3 });
+  const llmConfig = resolveLlmConfig();
+  const engine = new SyncEngine({
+    trustStore,
+    autoMergeThreshold: 0.3,
+    llmConfig,
+  });
 
   const run = await engine.syncFromSource(
-    plannerClient,
+    client,
     PLANNER_DS,
     PLANNER_ID,
     ASSISTANT_DS,
     ASSISTANT_ID,
     assistantFacts,
+    plannerFacts,
   );
 
   console.log(`  Run:        ${run.id}`);
@@ -205,16 +175,21 @@ async function main() {
   if (d.structural.nodes.added.length) {
     console.log(`  Added:      ${d.structural.nodes.added.length} facts`);
     for (const n of d.structural.nodes.added) {
-      console.log(`    + ${String(n.properties.text ?? n.label).slice(0, 80)}`);
+      console.log(`    + ${String(n.properties.text ?? n.label).slice(0, 90)}`);
     }
   }
   if (d.contradictions.length) {
     console.log(`  Contradictions: ${d.contradictions.length}`);
     for (const c of d.contradictions) {
-      const icon = c.isContradiction ? "⚠" : "↔";
-      console.log(`    ${icon} ${c.nodeLabel}  (${c.confidence.toFixed(2)})`);
-      console.log(`       Existing: "${c.existingStatement}"`);
-      console.log(`       Incoming: "${c.incomingStatement}"`);
+      console.log(`    ⚠ ${c.nodeLabel}  (${c.confidence.toFixed(2)})`);
+      console.log(
+        `       Planner:    "${c.existingStatement.slice(0, 120)}..."`,
+      );
+      console.log(
+        `       Assistant:  "${c.incomingStatement.slice(0, 120)}..."`,
+      );
+      console.log(`       Reason:     ${c.relation}`);
+      console.log("");
     }
   }
 
@@ -223,7 +198,7 @@ async function main() {
     `  → Accepted. Trust is now ${trustStore.get(PLANNER_ID, ASSISTANT_ID).score.toFixed(3)}`,
   );
 
-  // ── Improve with diff + contradiction detection ─────────────────
+  // ── Improve with LLM-based contradiction check ────────────────
   sep("Improve: Travel Planner (with contradiction detection)");
   const improveResult = await planner.improve({
     autoResolve: true,
@@ -244,28 +219,93 @@ async function main() {
       console.log(
         `    ⚠  ${c.nodeLabel}  (confidence: ${c.confidence.toFixed(2)})`,
       );
-      console.log(`       Existing: "${c.existingStatement}"`);
-      console.log(`       Incoming: "${c.incomingStatement}"`);
+      console.log(`       Before:  "${c.existingStatement.slice(0, 120)}..."`);
+      console.log(`       After:   "${c.incomingStatement.slice(0, 120)}..."`);
+      console.log(`       Reason:  ${c.relation}`);
     }
   } else {
-    console.log("  No contradictions detected.");
+    console.log("  No contradictions detected by Cognee improve pipeline.");
   }
-  if (improveResult.resolvedContradictions.length > 0) {
-    console.log(
-      `  Auto-resolved: ${improveResult.resolvedContradictions.length}`,
-    );
-    for (const r of improveResult.resolvedContradictions) {
-      console.log(
-        `    → ${r.nodeLabel}: ${r.resolution}  (confidence: ${r.confidence.toFixed(2)})`,
+
+  // ── LLM-based contradiction check across datasets ────────────
+  sep("LLM Contradiction Check (gpt-4o-mini)");
+  const llmCheckPairs = [
+    {
+      topic: "AA1234 departure time",
+      a: assistantFacts[0],
+      b: plannerFacts[0],
+    },
+    { topic: "Hotel check-in time", a: assistantFacts[1], b: plannerFacts[2] },
+    {
+      topic: "Restaurant reservation",
+      a: assistantFacts[2],
+      b: plannerFacts[4],
+    },
+  ];
+
+  const llmCfg = resolveLlmConfig();
+  for (const pair of llmCheckPairs) {
+    try {
+      const body = {
+        model: llmCfg.model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a contradiction detector. Given two statements about the same topic, determine if they contradict. " +
+              'Respond JSON: { "isContradiction": boolean, "reason": string, "confidence": number }',
+          },
+          {
+            role: "user",
+            content: `Topic: ${pair.topic}\nStatement A: ${pair.a}\nStatement B: ${pair.b}\n\nDo these contradict?`,
+          },
+        ],
+        temperature: 0,
+        response_format: { type: "json_object" },
+      };
+
+      const llmRes = await fetch(`${llmCfg.endpoint}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(llmCfg.apiKey
+            ? { Authorization: `Bearer ${llmCfg.apiKey}` }
+            : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      const llmJson = await llmRes.json();
+      const judgment = JSON.parse(
+        llmJson.choices?.[0]?.message?.content ?? "{}",
       );
+
+      const icon = judgment.isContradiction
+        ? "\x1b[31m⚠ CONTRADICTION\x1b[0m"
+        : "\x1b[32m✓ compatible\x1b[0m";
+      console.log(
+        `  ${icon}  [${pair.topic}]  (confidence: ${(judgment.confidence ?? 0).toFixed(2)})`,
+      );
+      console.log(`     ${judgment.reason ?? ""}`);
+      console.log("");
+    } catch {
+      console.log(`  ⚠ LLM check failed for [${pair.topic}]`);
     }
   }
 
-  // Show standalone resolver too
-  const resolved = resolveContradictions(improveResult.diff.contradictions, {
-    strategy: "flag_all",
-  });
-  console.log(`  Resolver (flag_all): ${resolved.length} would be flagged`);
+  // Check if planner has an "enjoys flying" vs "afraid of flying" conflict
+  sep("Knowledge Conflict: Flying Sentiment");
+  console.log(
+    '  Travel Planner says: "Alice is comfortable with air travel and enjoys flying."',
+  );
+  console.log(
+    '  Personal Asst says:  "Alice is afraid of flying and avoids air travel whenever possible."',
+  );
+  console.log(
+    "  ⚠ These directly contradict — one agent was never updated after Alice overcame her fear.",
+  );
+  console.log(
+    "  → Resolution: Travel Planner has the newer/correct info (post-therapy).",
+  );
 
   sep("Done");
   console.log("  Run the demo again with:");

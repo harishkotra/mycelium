@@ -15,7 +15,7 @@ export async function acceptSync(
 
   run.status = "accepted";
 
-  trustStore.adjust(subscriberAgentId, run.sourceDataset, "accept");
+  trustStore.adjust(subscriberAgentId, run.sourceAgentId, "accept");
 }
 
 export async function rejectSync(
@@ -31,5 +31,5 @@ export async function rejectSync(
 
   run.status = "rejected";
 
-  trustStore.adjust(subscriberAgentId, run.sourceDataset, "reject");
+  trustStore.adjust(subscriberAgentId, run.sourceAgentId, "reject");
 }
