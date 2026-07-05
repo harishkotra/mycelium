@@ -514,13 +514,6 @@ pnpm --filter travel-assistant-demo demo             # verify it works
 
 ---
 
-## License
+#### AI Disclosure
 
-MIT
-
----
-
-<div align="center">
-  <p>Built by <a href="https://harishkotra.me">Harish Kotra</a></p>
-  <p>Check out other builds at <a href="https://dailybuild.xyz">dailybuild.xyz</a></p>
-</div>
+This project was built in collaboration (AI Assisted development) using OpenCode (with DeepSeek V4 Flash model), with human-directed ideation, planning, architecture decisions and prompt engineering.
